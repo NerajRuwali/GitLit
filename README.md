@@ -1,104 +1,153 @@
-# GitHub Contribution Visualizer
+# GitLit — GitHub Contribution Analytics Platform
 
-A full-stack web application that analyzes GitHub repositories and visualizes contribution patterns, commit frequency, developer activity, and repository insights.
+GitLit is a full-stack web application that provides detailed insights into GitHub repositories and developer activity. It enables users to analyze contribution patterns, repository metrics, and code activity through an interactive and visually structured interface.
 
-## 🚀 Features
+--------------------------------------------------
 
-- **User Analysis** — Enter a GitHub username to see profile stats, languages, and repositories
-- **Repository Analysis** — Deep-dive into any repo with commit timelines, contributor charts, heatmaps, and word clouds
-- **Compare Repos** — Side-by-side comparison of two repositories
-- **Dark/Light Mode** — Beautiful UI with smooth theme toggle
-- **Export Charts** — Download any chart as a PNG image
-- **Rate-limit Aware** — In-memory caching + GitHub API rate-limit handling
+## Live Demo
 
-## 🛠 Tech Stack
+Frontend: https://git-lit.vercel.app  
+Backend: https://gitlit.onrender.com  
 
-| Layer | Technology |
-|---|---|
-| Frontend | React, Vite, Tailwind CSS v4 |
-| Charts | Chart.js, react-chartjs-2, d3-cloud |
-| Backend | Node.js, Express |
-| API | GitHub REST API v3 |
-| Caching | node-cache (10 min TTL) |
+--------------------------------------------------
 
-## 📦 Setup
+## Features
 
-### Prerequisites
-- Node.js ≥ 18
-- A [GitHub Personal Access Token](https://github.com/settings/tokens) (recommended for higher rate limits)
+- Analyze GitHub repositories using username/repository input  
+- Visualize contribution data and activity patterns  
+- Display top repositories with key metrics (stars, forks, language)  
+- Real-time data fetching using GitHub API  
+- Scalable backend with modular route structure  
+- Responsive and modern UI  
+- Error handling with fallback for server cold starts  
 
-### 1. Clone & install
+--------------------------------------------------
 
-```bash
-git clone <your-repo-url>
-cd "Github contribution visualizer"
-```
+## Tech Stack
 
-### 2. Backend
+Frontend:
+- React (Vite)
+- JavaScript
+- CSS
 
-```bash
+Backend:
+- Node.js
+- Express.js
+
+Deployment:
+- Vercel (Frontend)
+- Render (Backend)
+
+APIs:
+- GitHub REST API
+
+--------------------------------------------------
+
+## Project Structure
+
+GitLit/
+│
+├── client/          # Frontend (React + Vite)
+│   ├── src/
+│   └── package.json
+│
+├── server/          # Backend (Node + Express)
+│   ├── routes/
+│   ├── controllers/
+│   └── server.js
+│
+└── README.md
+
+--------------------------------------------------
+
+## Installation and Setup
+
+### Clone the Repository
+
+git clone https://github.com/your-username/gitlit.git
+cd gitlit
+
+--------------------------------------------------
+
+### Backend Setup
+
 cd server
-cp .env.example .env
-# Edit .env and add your GITHUB_TOKEN
 npm install
-npm run dev
-```
 
-The server starts at `http://localhost:5000`.
+Create a .env file:
 
-### 3. Frontend
+PORT=5001
+GITHUB_TOKEN=your_github_token
+FRONTEND_URL=http://localhost:5173
 
-```bash
+Run backend:
+
+npm start
+
+--------------------------------------------------
+
+### Frontend Setup
+
 cd client
 npm install
+
+Create a .env file:
+
+VITE_API_URL=http://localhost:5001
+
+Run frontend:
+
 npm run dev
-```
 
-The client starts at `http://localhost:5173` and proxies `/api` requests to the backend.
+--------------------------------------------------
 
-## 🔑 Environment Variables
+## Deployment
 
-| Variable | Description | Required |
-|---|---|---|
-| `GITHUB_TOKEN` | GitHub Personal Access Token | Recommended |
-| `PORT` | Backend port (default: 5000) | No |
+Frontend:
+- Deployed on Vercel
+- Environment variable:
+  VITE_API_URL=https://gitlit.onrender.com
 
-## 📡 API Endpoints
+Backend:
+- Deployed on Render
+- Uses dynamic port (process.env.PORT)
+- CORS configured for Vercel domain
 
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/api/user/:username` | User profile, repos & stats |
-| GET | `/api/repo/:owner/:repo` | Repo analysis with charts data |
-| GET | `/api/compare/:o1/:r1/:o2/:r2` | Compare two repos |
+--------------------------------------------------
 
-## 📁 Project Structure
+## API Endpoints
 
-```
-├── server/
-│   ├── server.js            # Express entry point
-│   ├── routes/api.js        # REST endpoints
-│   ├── services/github.js   # GitHub API client + caching
-│   ├── services/analytics.js# Data analysis functions
-│   ├── .env.example
-│   └── package.json
-├── client/
-│   ├── src/
-│   │   ├── App.jsx          # Main application
-│   │   ├── api.js           # API client
-│   │   ├── index.css        # Global styles + themes
-│   │   ├── hooks/useDebounce.js
-│   │   └── components/
-│   │       ├── SearchBar.jsx
-│   │       ├── Dashboard.jsx
-│   │       ├── CompareView.jsx
-│   │       └── charts/
-│   │           ├── CommitTimeline.jsx
-│   │           ├── TopContributors.jsx
-│   │           ├── ContributionPie.jsx
-│   │           ├── ContributionHeatmap.jsx
-│   │           └── WordCloud.jsx
-│   ├── index.html
-│   ├── vite.config.js
-│   └── package.json
-└── .gitignore
-```
+Base URL:
+https://gitlit.onrender.com/api
+
+- GET /api/test  
+  Check server status  
+
+- GET /api/github/user?username={username}  
+  Fetch GitHub user data  
+
+--------------------------------------------------
+
+## Key Learnings
+
+- Full-stack deployment using Vercel and Render  
+- Handling CORS and environment variables in production  
+- API integration and error handling  
+- Debugging network and deployment issues  
+- Designing scalable backend architecture  
+
+--------------------------------------------------
+
+## Future Enhancements
+
+- AI-based repository insights  
+- Advanced data visualization  
+- User authentication and saved dashboards  
+- Performance optimization and caching  
+- Custom domain integration  
+
+--------------------------------------------------
+
+## Author
+
+Neeraj Ruwali
