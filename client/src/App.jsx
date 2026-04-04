@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiAlertCircle, FiGitBranch } from 'react-icons/fi';
+import { FiAlertCircle, FiGitBranch, FiLoader } from 'react-icons/fi';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import Features from './components/Features';
@@ -18,7 +18,7 @@ import ContributionHeatmap from './components/charts/ContributionHeatmap';
 import WordCloud from './components/charts/WordCloud';
 import HourlyChart from './components/charts/HourlyChart';
 import LoaderSkeleton from './components/LoaderSkeleton';
-import AnalyticsDashboard from './components/AnalyticsDashboard'; // NEW SHELL
+import AnalyticsDashboard from './components/AnalyticsDashboard';
 import { fetchUser, fetchRepo } from './api';
 
 function App() {
@@ -29,9 +29,11 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [coldStartMsg, setColdStartMsg] = useState(false);
   
   const queryRef = useRef(query);
   const resultsRef = useRef(null);
+  const coldStartTimerRef = useRef(null);
 
   // Synchronize ref for callback stability
   const setQueryWrapped = (val) => {
@@ -61,6 +63,12 @@ function App() {
     setHasSearched(true);
     setError(null);
     setData(null);
+    setColdStartMsg(false);
+
+    // Show cold-start message after 5s of loading
+    coldStartTimerRef.current = setTimeout(() => {
+      setColdStartMsg(true);
+    }, 5000);
 
     try {
       const parsed = parseInput(q);
@@ -89,21 +97,24 @@ function App() {
     } catch (err) {
       console.error('SEARCH ERROR:', err);
       
-      let errorMessage = 'Unable to fetch data. Try again.';
+      let errorMessage = 'Unable to fetch data. Please try again.';
       
-      if (err.response?.data) {
-        const data = err.response.data;
-        if (typeof data.error === 'string') errorMessage = data.error;
-        else if (data.error?.message) errorMessage = data.error.message;
-        else if (typeof data.message === 'string') errorMessage = data.message;
-      } else if (err.message) {
+      // Extract the most useful error message
+      if (err.message) {
         errorMessage = err.message;
       }
       
       setError(errorMessage);
     } finally {
       setLoading(false);
+      setColdStartMsg(false);
+      clearTimeout(coldStartTimerRef.current);
     }
+  }, []);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => clearTimeout(coldStartTimerRef.current);
   }, []);
 
   // ============================================
@@ -114,6 +125,28 @@ function App() {
       <div className="dark min-h-screen w-full relative bg-[#0a0a0a] text-[#e5e7eb] font-sans selection:bg-red-500/30">
         <CursorGlow />
         
+        {/* Cold Start Loading Overlay */}
+        <AnimatePresence>
+          {loading && coldStartMsg && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] glass-card px-6 py-4 border-amber-500/30 bg-[#111]/95 shadow-[0_10px_40px_rgba(245,158,11,0.15)] backdrop-blur-xl"
+            >
+              <div className="flex items-center gap-4 text-amber-400">
+                <FiLoader className="animate-spin" size={20} />
+                <div>
+                  <h4 className="font-bold text-sm">Server is starting up…</h4>
+                  <p className="text-xs text-amber-400/70 font-medium mt-0.5">
+                    First request may take up to 30s (free-tier cold start)
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Error State Overlay */}
         <AnimatePresence>
           {error && (
@@ -121,15 +154,28 @@ function App() {
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="absolute top-6 left-1/2 -translate-x-1/2 z-50 glass-card p-6 border-red-500/30 bg-[#111]/90 shadow-[0_10px_40px_rgba(239,68,68,0.2)]"
+              className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] glass-card p-6 border-red-500/30 bg-[#111]/90 shadow-[0_10px_40px_rgba(239,68,68,0.2)] max-w-lg"
             >
               <div className="flex items-center gap-4 text-red-500">
-                <FiAlertCircle size={24} />
-                <div>
-                  <h4 className="font-bold">Analysis Interrupted</h4>
-                  <p className="text-sm text-red-400 font-medium">{error}</p>
+                <FiAlertCircle size={24} className="shrink-0" />
+                <div className="min-w-0">
+                  <h4 className="font-bold">Something went wrong</h4>
+                  <p className="text-sm text-red-400 font-medium mt-1 break-words">{error}</p>
                 </div>
-                <button onClick={() => setError(null)} className="ml-4 px-4 py-1.5 rounded-full bg-red-500/10 text-xs font-bold hover:bg-red-500/20 transition-colors">Dismiss</button>
+                <div className="flex gap-2 shrink-0">
+                  <button 
+                    onClick={() => doSearch()} 
+                    className="px-4 py-1.5 rounded-full bg-red-500/10 text-xs font-bold hover:bg-red-500/20 transition-colors"
+                  >
+                    Retry
+                  </button>
+                  <button 
+                    onClick={() => setError(null)} 
+                    className="px-4 py-1.5 rounded-full bg-white/5 text-xs font-bold hover:bg-white/10 transition-colors text-slate-400"
+                  >
+                    Dismiss
+                  </button>
+                </div>
               </div>
             </motion.div>
           )}

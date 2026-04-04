@@ -1,13 +1,27 @@
 const express = require('express');
 const router = express.Router();
-const OpenAI = require('openai');
+
+let OpenAI;
+try {
+  OpenAI = require('openai');
+} catch (err) {
+  console.warn('⚠️  OpenAI library not available:', err.message);
+}
 
 router.post('/ai-insights', async (req, res) => {
   const { commits, languages, contributors, stars, forks, streak } = req.body;
   try {
 
-    if (!process.env.OPENAI_API_KEY) {
-      return res.status(500).json({ error: 'OpenAI API key is missing' });
+    if (!OpenAI || !process.env.OPENAI_API_KEY) {
+      // Return mock insights instead of crashing
+      const dominantLanguage = Object.keys(languages || {})[0] || 'code';
+      const mockInsights = [
+        `Consistent commit activity observed with a total of ${commits || 0} commits processed.`,
+        `${dominantLanguage} deeply dominates the current structural pattern.`,
+        `${(contributors || 0) > 5 ? 'High' : 'Focused'} contributor velocity detected across ${contributors || 0} active developers.`,
+        `Repository footprint shows healthy engagement metrics with ${stars || 0} stars and ${forks || 0} forks.`
+      ];
+      return res.json({ insights: mockInsights, isMock: true });
     }
 
     const openai = new OpenAI({
