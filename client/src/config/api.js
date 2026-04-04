@@ -12,10 +12,10 @@ export const API_BASE = `${BASE_URL}/api`;
 
 // Render free tier spins down after 15 min of inactivity.
 // First cold-start request can take 30–60 s.
-export const REQUEST_TIMEOUT = 60_000;
+export const REQUEST_TIMEOUT = 45_000;
 
-// Retry configuration for cold-start resilience
+// Retry configuration — LIMITED to prevent infinite-feeling loops
 export const RETRY_CONFIG = {
-  maxRetries: 3,
-  baseDelay: 2000, // ms — doubles on each retry (2s, 4s, 8s)
+  maxRetries: 2,      // Total attempts = 3 (initial + 2 retries)
+  baseDelay: 3000,    // ms — 3s, then 6s
 };

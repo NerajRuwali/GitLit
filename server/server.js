@@ -144,6 +144,5 @@ process.on('unhandledRejection', (reason, promise) => {
 process.on('uncaughtException', (err) => {
   console.error('💥 Uncaught Exception:', err.message);
   console.error(err.stack);
-  // Allow time for logging before exit
-  setTimeout(() => process.exit(1), 1000);
+  // DO NOT call process.exit() — keep the server alive on Render
 });

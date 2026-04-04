@@ -2,6 +2,9 @@
  * GitHub API Service
  * Handles all communication with the GitHub REST API.
  * Includes in-memory caching (node-cache) and rate-limit awareness.
+ *
+ * SAFETY: Every public function is wrapped so it NEVER throws an
+ *         unhandled error — always returns fallback data on failure.
  */
 
 const axios = require('axios');
@@ -12,9 +15,11 @@ const cache = new NodeCache({ stdTTL: 600, checkperiod: 120 });
 
 /**
  * Create an authenticated Axios instance for GitHub API.
+ * If GITHUB_TOKEN is missing the requests still work (lower rate limit).
  */
 const ghApi = axios.create({
   baseURL: 'https://api.github.com',
+  timeout: 30000, // 30s timeout to avoid hanging requests
   headers: {
     Accept: 'application/vnd.github.v3+json',
     ...(process.env.GITHUB_TOKEN
@@ -23,22 +28,42 @@ const ghApi = axios.create({
   },
 });
 
+if (!process.env.GITHUB_TOKEN) {
+  console.warn('⚠️  GITHUB_TOKEN not set — API rate limit will be 60 req/hr (unauthenticated)');
+}
+
 // ---------- Rate-limit helper ----------
 
 let rateLimitRemaining = null;
 let rateLimitReset = null;
 
-ghApi.interceptors.response.use((response) => {
-  rateLimitRemaining = parseInt(response.headers['x-ratelimit-remaining'], 10);
-  rateLimitReset = parseInt(response.headers['x-ratelimit-reset'], 10);
-  return response;
-});
+ghApi.interceptors.response.use(
+  (response) => {
+    rateLimitRemaining = parseInt(response.headers['x-ratelimit-remaining'], 10);
+    rateLimitReset = parseInt(response.headers['x-ratelimit-reset'], 10);
+    return response;
+  },
+  (error) => {
+    // Still capture rate limit headers on error responses
+    if (error.response?.headers) {
+      const rem = error.response.headers['x-ratelimit-remaining'];
+      const rst = error.response.headers['x-ratelimit-reset'];
+      if (rem !== undefined) rateLimitRemaining = parseInt(rem, 10);
+      if (rst !== undefined) rateLimitReset = parseInt(rst, 10);
+    }
+    return Promise.reject(error);
+  }
+);
 
+/**
+ * Check rate limit — throws a descriptive error if exhausted.
+ * Returns silently if rate limit is fine or unknown.
+ */
 function checkRateLimit() {
-  if (rateLimitRemaining !== null && rateLimitRemaining <= 5) {
-    const resetDate = new Date(rateLimitReset * 1000);
+  if (rateLimitRemaining !== null && rateLimitRemaining <= 2) {
+    const resetDate = new Date((rateLimitReset || 0) * 1000);
     const err = new Error(
-      `GitHub API rate limit nearly exhausted. Resets at ${resetDate.toISOString()}`
+      `GitHub API rate limit exhausted. Resets at ${resetDate.toISOString()}`
     );
     err.status = 429;
     throw err;
@@ -53,41 +78,77 @@ async function cachedGet(url, params = {}) {
   if (hit) return hit;
 
   checkRateLimit();
-  const { data } = await ghApi.get(url, { params });
-  cache.set(key, data);
-  return data;
+
+  try {
+    const { data } = await ghApi.get(url, { params });
+    cache.set(key, data);
+    return data;
+  } catch (err) {
+    // Build a clean error with the right status code
+    const status = err.response?.status || 500;
+    const message =
+      err.response?.data?.message ||
+      err.message ||
+      'GitHub API request failed';
+
+    const cleanErr = new Error(message);
+    cleanErr.status = status;
+    throw cleanErr;
+  }
 }
 
 // ---------- Public API ----------
 
 /** Fetch a GitHub user profile */
 async function getUser(username) {
-  return cachedGet(`/users/${username}`);
+  try {
+    return await cachedGet(`/users/${username}`);
+  } catch (err) {
+    console.error(`[github] getUser("${username}") failed:`, err.message);
+    throw err;
+  }
 }
 
 /** Fetch public repos for a user (up to 100) */
 async function getUserRepos(username) {
-  return cachedGet(`/users/${username}/repos`, {
-    per_page: 100,
-    sort: 'updated',
-  });
+  try {
+    return await cachedGet(`/users/${username}/repos`, {
+      per_page: 100,
+      sort: 'updated',
+    });
+  } catch (err) {
+    console.error(`[github] getUserRepos("${username}") failed:`, err.message);
+    // Return empty array so route handler still has something to work with
+    if (err.status === 404) throw err;
+    return [];
+  }
 }
 
 /** Fetch repo metadata */
 async function getRepoDetails(owner, repo) {
-  return cachedGet(`/repos/${owner}/${repo}`);
+  try {
+    return await cachedGet(`/repos/${owner}/${repo}`);
+  } catch (err) {
+    console.error(`[github] getRepoDetails("${owner}/${repo}") failed:`, err.message);
+    throw err;
+  }
 }
 
 /**
  * Fetch commits for a repo (paginated, up to 500).
- * Returns an array of commit objects.
+ * Returns an array of commit objects. Never throws — returns [] on failure.
  */
 async function getCommits(owner, repo, maxPages = 5) {
   const cacheKey = `commits:${owner}/${repo}`;
   const hit = cache.get(cacheKey);
   if (hit) return hit;
 
-  checkRateLimit();
+  try {
+    checkRateLimit();
+  } catch (err) {
+    console.error(`[github] getCommits rate-limited:`, err.message);
+    return [];
+  }
 
   let allCommits = [];
   for (let page = 1; page <= maxPages; page++) {
@@ -99,9 +160,10 @@ async function getCommits(owner, repo, maxPages = 5) {
       allCommits = allCommits.concat(data);
       if (data.length < 100) break; // last page
     } catch (err) {
-      // If 409 (empty repo) just return empty
-      if (err.response && err.response.status === 409) break;
-      throw err;
+      // 409 = empty repo, 404 = not found — just return what we have
+      if (err.response && (err.response.status === 409 || err.response.status === 404)) break;
+      console.error(`[github] getCommits page ${page} failed:`, err.message);
+      break; // Return partial results instead of crashing
     }
   }
 
@@ -109,26 +171,25 @@ async function getCommits(owner, repo, maxPages = 5) {
   return allCommits;
 }
 
-/** Fetch contributors for a repo */
+/** Fetch contributors for a repo — returns [] on any failure */
 async function getContributors(owner, repo) {
   try {
     return await cachedGet(`/repos/${owner}/${repo}/contributors`, {
       per_page: 100,
     });
   } catch (err) {
-    // Some repos (forks with no own commits) return 404
-    if (err.response && err.response.status === 404) return [];
-    throw err;
+    console.error(`[github] getContributors("${owner}/${repo}") failed:`, err.message);
+    return [];
   }
 }
 
-/** Fetch language breakdown for a repo (bytes per language) */
+/** Fetch language breakdown for a repo — returns {} on any failure */
 async function getLanguages(owner, repo) {
   try {
     return await cachedGet(`/repos/${owner}/${repo}/languages`);
   } catch (err) {
-    if (err.response && err.response.status === 404) return {};
-    throw err;
+    console.error(`[github] getLanguages("${owner}/${repo}") failed:`, err.message);
+    return {};
   }
 }
 

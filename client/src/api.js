@@ -3,8 +3,9 @@
  *
  * Features:
  *  - Centralized config (src/config/api.js)
- *  - Automatic retry with exponential backoff (handles Render cold starts)
- *  - Friendly error messages for network failures
+ *  - Retry with backoff ONLY for network failures (cold start, timeout)
+ *  - Does NOT retry on server errors (4xx, 5xx) — those are real errors
+ *  - Friendly error messages for all failure modes
  */
 import axios from 'axios';
 import { API_BASE, REQUEST_TIMEOUT, RETRY_CONFIG } from './config/api';
@@ -22,7 +23,8 @@ const api = axios.create({
 
 /**
  * Execute an async function with retries and exponential backoff.
- * Retries only on network-level failures (cold start, timeout), NOT on 4xx errors.
+ * ONLY retries on true network failures (no response received at all).
+ * Does NOT retry on 4xx or 5xx — the server answered, just with an error.
  */
 async function withRetry(fn, retries = RETRY_CONFIG.maxRetries) {
   let lastError;
@@ -32,18 +34,19 @@ async function withRetry(fn, retries = RETRY_CONFIG.maxRetries) {
     } catch (error) {
       lastError = error;
 
-      // Don't retry on client errors (4xx) — only on network/server errors
-      const status = error.response?.status;
-      if (status && status >= 400 && status < 500) {
+      // If the server actually responded (ANY status code), don't retry —
+      // the server is alive, it just returned an error.
+      if (error.response) {
         throw error;
       }
 
-      // If we have retries left, wait with exponential backoff
+      // Only retry on true network-level failures (no response at all):
+      // ERR_NETWORK, ECONNABORTED (timeout), ECONNREFUSED, etc.
       if (attempt < retries) {
         const delay = RETRY_CONFIG.baseDelay * Math.pow(2, attempt);
         console.warn(
-          `[GitLit] Request failed (attempt ${attempt + 1}/${retries + 1}), retrying in ${delay}ms...`,
-          error.message
+          `[GitLit] Network failure (attempt ${attempt + 1}/${retries + 1}), retrying in ${delay}ms...`,
+          error.code || error.message
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
@@ -58,15 +61,31 @@ async function withRetry(fn, retries = RETRY_CONFIG.maxRetries) {
  * Convert Axios errors into friendly, user-facing messages.
  */
 function friendlyError(error) {
-  if (error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-    return 'Server is waking up — please wait a moment and try again (Render free-tier cold start can take ~30s)';
+  // Network-level failure — server didn't respond at all
+  if (!error.response) {
+    if (error.code === 'ECONNABORTED') {
+      return 'Request timed out. The server may be starting up — please try again in a moment.';
+    }
+    return 'Could not reach the server. It may be starting up — please try again in ~30 seconds.';
   }
-  if (error.response?.data) {
-    const d = error.response.data;
+
+  // Server responded with an error
+  const status = error.response.status;
+  const d = error.response.data;
+
+  // Extract the error message from response body
+  if (d) {
     if (typeof d.error === 'string') return d.error;
     if (d.error?.message) return d.error.message;
     if (typeof d.message === 'string') return d.message;
+    if (typeof d.details === 'string') return d.details;
   }
+
+  // Fallback based on status code
+  if (status === 404) return 'Not found. Please check the username or repository name.';
+  if (status === 429) return 'GitHub API rate limit exceeded. Please wait a few minutes and try again.';
+  if (status >= 500) return 'Server error occurred. Please try again.';
+
   return error.message || 'An unknown error occurred';
 }
 

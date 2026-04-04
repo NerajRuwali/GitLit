@@ -65,10 +65,10 @@ function App() {
     setData(null);
     setColdStartMsg(false);
 
-    // Show cold-start message after 5s of loading
+    // Show cold-start message after 8s — only for genuine cold starts
     coldStartTimerRef.current = setTimeout(() => {
       setColdStartMsg(true);
-    }, 5000);
+    }, 8000);
 
     try {
       const parsed = parseInput(q);
@@ -137,9 +137,9 @@ function App() {
               <div className="flex items-center gap-4 text-amber-400">
                 <FiLoader className="animate-spin" size={20} />
                 <div>
-                  <h4 className="font-bold text-sm">Server is starting up…</h4>
+                  <h4 className="font-bold text-sm">Server starting or loading data…</h4>
                   <p className="text-xs text-amber-400/70 font-medium mt-0.5">
-                    First request may take up to 30s (free-tier cold start)
+                    This may take up to 30s on first request. Please wait.
                   </p>
                 </div>
               </div>
@@ -159,7 +159,7 @@ function App() {
               <div className="flex items-center gap-4 text-red-500">
                 <FiAlertCircle size={24} className="shrink-0" />
                 <div className="min-w-0">
-                  <h4 className="font-bold">Something went wrong</h4>
+                  <h4 className="font-bold">Server starting or error occurred</h4>
                   <p className="text-sm text-red-400 font-medium mt-1 break-words">{error}</p>
                 </div>
                 <div className="flex gap-2 shrink-0">
