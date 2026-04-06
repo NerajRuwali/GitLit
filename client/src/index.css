@@ -93,13 +93,13 @@ html {
   z-index: -1;
 }
 
-/* ===== Spacing Utilities ===== */
+
 .section-py {
   padding-top: 8rem;
   padding-bottom: 8rem;
 }
 
-/* ===== Stat Card Icon ===== */
+
 .stat-icon {
   width: 44px;
   height: 44px;
@@ -111,14 +111,13 @@ html {
   color: var(--accent-solid);
 }
 
-/* ===== Navbar ===== */
+
 .navbar {
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(12px);
 }
 
-/* ===== Primary Button ===== */
 .btn-primary {
   background: var(--accent);
   color: #fff;
